@@ -1,0 +1,2 @@
+Options: 
+CMake: 3.8.2@/media/mohamed/8A9CDD219CDD0899/Programs/Clion2/clion-2017.2.1/bin/cmake/bin/cmake
