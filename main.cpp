@@ -44,29 +44,23 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-int main(void)
-{
-    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
-    struct addrinfo hints, *servinfo, *p;
-    struct sockaddr_storage their_addr; // connector's address information
-    socklen_t sin_size;
-    struct sigaction sa;
-    int yes=1;
-    char s[INET6_ADDRSTRLEN];
+void GetAddressInfo(struct addrinfo *&servinfo) {
     int rv;
-    char buf[MAXDATASIZE];
+    struct addrinfo hints;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
-
     if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        // return 1;
     }
+}
 
-    // loop through all the results and bind to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
+void BindFirstSucc(struct addrinfo *servinfo, int &sockfd) {
+    struct addrinfo *p;
+    int yes = 1;
+    for (p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
                              p->ai_protocol)) == -1) {
             perror("server: socket");
@@ -87,19 +81,22 @@ int main(void)
 
         break;
     }
-
     freeaddrinfo(servinfo); // all done with this structure
-
-    if (p == NULL)  {
+    if (p == NULL) {
         fprintf(stderr, "server: failed to bind\n");
         exit(1);
     }
+}
 
+void ListenOnSocket(int sockfd) {
     if (listen(sockfd, BACKLOG) == -1) {
         perror("listen");
         exit(1);
     }
+}
 
+void ReapDead() {
+    struct sigaction sa;
     sa.sa_handler = sigchld_handler; // reap all dead processes
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
@@ -107,6 +104,31 @@ int main(void)
         perror("sigaction");
         exit(1);
     }
+}
+
+int main(void) {
+    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    struct addrinfo *servinfo, *p;
+    struct sockaddr_storage their_addr; // connector's address information
+    socklen_t sin_size;
+
+
+    char s[INET6_ADDRSTRLEN];
+    char buf[MAXDATASIZE];
+
+
+    GetAddressInfo(servinfo);
+
+    // loop through all the results and bind to the first we can
+    BindFirstSucc(servinfo, sockfd);
+
+    ListenOnSocket(sockfd);
+
+    ReapDead(); // reap all dead processes
+
+
+
+
 
     printf("server: waiting for connections...\n");
 
@@ -125,41 +147,39 @@ int main(void)
 
         int i=0;
         int childID;
-            if(!(childID=fork())) {
-                while(true) {
-                    std::string word;
-                    std::getline(std::cin,word);
+        if(!(childID=fork())) {
+            while(true) {
+                std::string word;
+                std::getline(std::cin,word);
 
-                    //sleep(1);
-                    if(send(new_fd, word.c_str(), word.length(), 0)==-1) {
-                        std::cout << "exited from the sending fork" << std::endl;
+                //sleep(1);
+                if(send(new_fd, word.c_str(), word.length(), 0)==-1) {
+                    std::cout << "exited from the sending fork" << std::endl;
                     exit(0);
-                    }
-
                 }
+
             }
-            while(true)
-            {int numbytes=recv(new_fd, buf, MAXDATASIZE-1, 0);
-            if(numbytes==0)
-            {
+        }
+        while(true) {int numbytes=recv(new_fd, buf, MAXDATASIZE-1, 0);
+            if(numbytes==0) {
                 std::cout<<"the user has exited"<<std::endl;
                 kill(childID,SIGTERM);
                 break;
-              //  exit(0);
+                //  exit(0);
             }
-        buf[numbytes]='\0';
+            buf[numbytes]='\0';
             printf("client responded with: %s\n",buf);
-            }
-
-
-      /*  if (!fork()) { // this is the child process
-            close(sockfd); // child doesn't need the listener
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-            close(new_fd);
-            exit(0);
         }
-        close(new_fd);  // parent doesn't need this */
+
+
+        /*  if (!fork()) { // this is the child process
+              close(sockfd); // child doesn't need the listener
+              if (send(new_fd, "Hello, world!", 13, 0) == -1)
+                  perror("send");
+              close(new_fd);
+              exit(0);
+          }
+          close(new_fd);  // parent doesn't need this */
     }
 
     return 0;
