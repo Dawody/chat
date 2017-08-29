@@ -134,52 +134,57 @@ int main(void) {
 
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+        new_fd = accept(sockfd, (struct sockaddr *) &their_addr, &sin_size);
         if (new_fd == -1) {
             perror("accept");
             continue;
         }
+        int Sid; //the server process id that communicates with a new client
+        if (!(Sid = fork())) {
+            inet_ntop(their_addr.ss_family,
+                      get_in_addr((struct sockaddr *) &their_addr),
+                      s, sizeof s);
+            printf("server: got connection from %s\n", s);
 
-        inet_ntop(their_addr.ss_family,
-                  get_in_addr((struct sockaddr *)&their_addr),
-                  s, sizeof s);
-        printf("server: got connection from %s\n", s);
+            int i = 0;
+            int childID;
+            if (!(childID = fork())) {
+                while (true) {
+                    std::string word;
+                    std::getline(std::cin, word);
 
-        int i=0;
-        int childID;
-        if(!(childID=fork())) {
-            while(true) {
-                std::string word;
-                std::getline(std::cin,word);
+                    //sleep(1);
+                    if (send(new_fd, word.c_str(), word.length(), 0) == -1) {
+                        std::cout << "exited from the sending fork" << std::endl;
+                        exit(0);
+                    }
 
-                //sleep(1);
-                if(send(new_fd, word.c_str(), word.length(), 0)==-1) {
-                    std::cout << "exited from the sending fork" << std::endl;
-                    exit(0);
                 }
-
             }
-        }
-        while(true) {int numbytes=recv(new_fd, buf, MAXDATASIZE-1, 0);
-            if(numbytes==0) {
-                std::cout<<"the user has exited"<<std::endl;
-                kill(childID,SIGTERM);
-                break;
-                //  exit(0);
+            while (true) {
+                int numbytes = recv(new_fd, buf, MAXDATASIZE - 1, 0);
+                if (numbytes == 0) {
+                    std::cout << "the user has exited" << std::endl;
+                    kill(childID, SIGTERM);
+                    exit(0);
+                    break;
+                    //
+                }
+                buf[numbytes] = '\0';
+                std::cout << "client number:" << new_fd << " ";
+                printf(" responded with: %s\n", buf);
             }
-            buf[numbytes]='\0';
-            printf("client responded with: %s\n",buf);
+
+
+            /*  if (!fork()) { // this is the child process
+                  close(sockfd); // child doesn't need the listener
+                  if (send(new_fd, "Hello, world!", 13, 0) == -1)
+                      perror("send");
+                  close(new_fd);
+                  exit(0);
+              }
+              close(new_fd);  // parent doesn't need this */
         }
-
-
-        /*  if (!fork()) { // this is the child process
-              close(sockfd); // child doesn't need the listener
-              if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                  perror("send");
-              close(new_fd);
-              exit(0);
-          }
-          close(new_fd);  // parent doesn't need this */
     }
 
     return 0;
